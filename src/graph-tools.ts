@@ -954,6 +954,8 @@ async function executeGraphTool(
         let pageCount = 1;
         const maxPages = positiveIntFromEnv('MS365_MCP_MAX_PAGES', DEFAULT_MAX_PAGES);
         const maxItems = positiveIntFromEnv('MS365_MCP_MAX_ITEMS', DEFAULT_MAX_ITEMS);
+        let truncated = false;
+        let truncationReason: 'maxPages' | 'maxItems' | undefined;
         // Graph only emits @odata.deltaLink on the final page of a /delta query.
         // Track it across the pagination loop so we can stamp it on the combined
         // response — otherwise fetchAllPages on a /delta endpoint silently drops
@@ -990,10 +992,21 @@ async function executeGraphTool(
           }
         }
 
+        if (allItems.length > maxItems) {
+          allItems = allItems.slice(0, maxItems);
+          truncated = true;
+          truncationReason = 'maxItems';
+        }
         if (pageCount >= maxPages) {
+          if (nextLink && !truncationReason) {
+            truncated = true;
+            truncationReason = 'maxPages';
+          }
           logger.warn(`Reached maximum page limit (${maxPages}) for pagination`);
         }
-        if (allItems.length >= maxItems) {
+        if (nextLink && allItems.length >= maxItems) {
+          truncated = true;
+          truncationReason = 'maxItems';
           logger.warn(
             `Reached maximum item limit (${maxItems}) for pagination — truncated at ${allItems.length} items`
           );
@@ -1006,6 +1019,13 @@ async function executeGraphTool(
         delete combinedResponse['@odata.nextLink'];
         if (deltaLink) {
           combinedResponse['@odata.deltaLink'] = deltaLink;
+        }
+        if (truncated) {
+          combinedResponse.truncated = true;
+          combinedResponse.truncationReason = truncationReason;
+          if (nextLink) {
+            combinedResponse.remainingNextLink = nextLink;
+          }
         }
 
         response.content[0].text = JSON.stringify(combinedResponse);

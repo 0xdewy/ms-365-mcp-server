@@ -299,6 +299,25 @@ describe('graph-tools', () => {
         expect(graphClient.graphRequest).toHaveBeenCalledTimes(2);
       });
 
+      it('should mark responses truncated when MS365_MCP_MAX_PAGES is reached', async () => {
+        process.env.MS365_MCP_MAX_PAGES = '2';
+        mockEndpoints.push(makeEndpoint());
+        mockEndpointsJson = [makeConfig()];
+
+        const graphClient = createMockGraphClient(paginatingResponses(5));
+        const server = createMockServer();
+        const { registerGraphTools } = await loadModule();
+        registerGraphTools(server as any, graphClient as any);
+
+        const result = await server.tools.get('test-tool')!.handler({ fetchAllPages: true });
+        const parsed = JSON.parse(result.content[0].text);
+
+        expect(parsed.truncated).toBe(true);
+        expect(parsed.truncationReason).toBe('maxPages');
+        expect(parsed.remainingNextLink).toContain('$skip=2');
+        expect(parsed['@odata.nextLink']).toBeUndefined();
+      });
+
       it('should honor MS365_MCP_MAX_ITEMS below the default', async () => {
         process.env.MS365_MCP_MAX_ITEMS = '2';
         mockEndpoints.push(makeEndpoint());
@@ -327,6 +346,50 @@ describe('graph-tools', () => {
 
         expect(graphClient.graphRequest).toHaveBeenCalledTimes(1);
         expect(JSON.parse(result.content[0].text).value).toHaveLength(2);
+      });
+
+      it('should mark and cap responses truncated when MS365_MCP_MAX_ITEMS is reached', async () => {
+        process.env.MS365_MCP_MAX_ITEMS = '3';
+        mockEndpoints.push(makeEndpoint());
+        mockEndpointsJson = [makeConfig()];
+
+        const graphClient = createMockGraphClient([
+          {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  value: [{ id: '1' }, { id: '2' }],
+                  '@odata.nextLink': 'https://graph.microsoft.com/v1.0/me/messages?$skip=2',
+                }),
+              },
+            ],
+          },
+          {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  value: [{ id: '3' }, { id: '4' }],
+                  '@odata.nextLink': 'https://graph.microsoft.com/v1.0/me/messages?$skip=4',
+                }),
+              },
+            ],
+          },
+        ]);
+        const server = createMockServer();
+        const { registerGraphTools } = await loadModule();
+        registerGraphTools(server as any, graphClient as any);
+
+        const result = await server.tools.get('test-tool')!.handler({ fetchAllPages: true });
+        const parsed = JSON.parse(result.content[0].text);
+
+        expect(parsed.value).toHaveLength(3);
+        expect(parsed.value.map((v: any) => v.id)).toEqual(['1', '2', '3']);
+        expect(parsed.truncated).toBe(true);
+        expect(parsed.truncationReason).toBe('maxItems');
+        expect(parsed.remainingNextLink).toContain('$skip=4');
+        expect(parsed['@odata.nextLink']).toBeUndefined();
       });
 
       it('should not follow nextLink when MS365_MCP_ALLOW_PAGINATION is disabled', async () => {
