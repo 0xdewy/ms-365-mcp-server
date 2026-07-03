@@ -10,6 +10,16 @@ function schemaFor(name: string) {
   return describeToolSchema(entry.tool, entry.config?.llmTip);
 }
 
+function bodySchemaFor(name: string) {
+  const body = schemaFor(name).parameters.find((p) => p.in === 'Body');
+  if (!body) throw new Error(`Tool ${name} has no body parameter`);
+  return body.schema as {
+    type?: string;
+    required?: string[];
+    properties?: Record<string, unknown>;
+  };
+}
+
 describe('describeToolSchema', () => {
   it('returns name, method, path, and parameters for a common tool', () => {
     const s = schemaFor('list-mail-messages');
@@ -42,5 +52,44 @@ describe('describeToolSchema', () => {
     if (!entry) return;
     const s = describeToolSchema(entry.tool, entry.config?.llmTip);
     expect(s.llmTip).toBeTruthy();
+  });
+
+  it('uses compact operational schemas for heavyweight SharePoint and Drive write tools', () => {
+    const maxSchemaBytes = 5000;
+    const toolNames = [
+      'create-sharepoint-list',
+      'create-sharepoint-list-item',
+      'update-sharepoint-list-item',
+      'create-onedrive-folder',
+      'move-rename-onedrive-item',
+    ];
+
+    for (const toolName of toolNames) {
+      const schema = bodySchemaFor(toolName);
+      expect(Buffer.byteLength(JSON.stringify(schema))).toBeLessThan(maxSchemaBytes);
+      expect(schema.type).toBe('object');
+    }
+  });
+
+  it('describes SharePoint list item writes as fields objects', () => {
+    for (const toolName of ['create-sharepoint-list-item', 'update-sharepoint-list-item']) {
+      const schema = bodySchemaFor(toolName);
+      expect(schema.required).toContain('fields');
+      expect(schema.properties).toHaveProperty('fields');
+    }
+  });
+
+  it('describes common SharePoint and Drive write bodies without Graph resource expansion', () => {
+    const listSchema = bodySchemaFor('create-sharepoint-list');
+    expect(listSchema.required).toEqual(expect.arrayContaining(['displayName', 'list']));
+    expect(listSchema.properties).toHaveProperty('columns');
+
+    const folderSchema = bodySchemaFor('create-onedrive-folder');
+    expect(folderSchema.required).toEqual(expect.arrayContaining(['name', 'folder']));
+    expect(folderSchema.properties).toHaveProperty('@microsoft.graph.conflictBehavior');
+
+    const moveSchema = bodySchemaFor('move-rename-onedrive-item');
+    expect(moveSchema.properties).toHaveProperty('name');
+    expect(moveSchema.properties).toHaveProperty('parentReference');
   });
 });
