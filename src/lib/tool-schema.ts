@@ -4,6 +4,13 @@ import type { api } from '../generated/client.js';
 
 type ToolEndpoint = (typeof api.endpoints)[number];
 type ParameterLocation = 'Path' | 'Query' | 'Body' | 'Header';
+type DescribedParameter = {
+  name: string;
+  in: ParameterLocation;
+  required: boolean;
+  description?: string;
+  schema: unknown;
+};
 
 const CONFLICT_BEHAVIOR_SCHEMA = {
   type: 'string',
@@ -151,15 +158,9 @@ export function describeToolSchema(
   path: string;
   description: string;
   llmTip?: string;
-  parameters: Array<{
-    name: string;
-    in: ParameterLocation;
-    required: boolean;
-    description?: string;
-    schema: unknown;
-  }>;
+  parameters: DescribedParameter[];
 } {
-  const params = (tool.parameters ?? []).map((p) => {
+  const params: DescribedParameter[] = (tool.parameters ?? []).map((p) => {
     const { inner, optional } = unwrapOptional(p.schema as z.ZodTypeAny);
     const isPath = p.type === 'Path';
     const schema =
@@ -175,6 +176,8 @@ export function describeToolSchema(
     };
   });
 
+  params.push(...controlParametersFor(tool));
+
   return {
     name: tool.alias,
     method: tool.method.toUpperCase(),
@@ -183,6 +186,38 @@ export function describeToolSchema(
     ...(llmTip ? { llmTip } : {}),
     parameters: params,
   };
+}
+
+function controlParametersFor(tool: ToolEndpoint): DescribedParameter[] {
+  const controls: DescribedParameter[] = [
+    {
+      name: 'includeHeaders',
+      in: 'Query',
+      required: false,
+      description: 'Include response headers such as ETag in the response metadata.',
+      schema: { type: 'boolean' },
+    },
+    {
+      name: 'excludeResponse',
+      in: 'Query',
+      required: false,
+      description: 'Return only success or failure instead of the full response body.',
+      schema: { type: 'boolean' },
+    },
+  ];
+
+  if (tool.method.toUpperCase() === 'GET') {
+    controls.unshift({
+      name: 'fetchAllPages',
+      in: 'Query',
+      required: false,
+      description:
+        'Follow @odata.nextLink and merge pages when the server allows pagination. Use with small $top/$select values for bounded exports.',
+      schema: { type: 'boolean' },
+    });
+  }
+
+  return controls.filter((control) => !(tool.parameters ?? []).some((p) => p.name === control.name));
 }
 
 function toJsonSchema(schema: z.ZodTypeAny): unknown {
