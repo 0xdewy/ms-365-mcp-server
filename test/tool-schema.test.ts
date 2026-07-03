@@ -80,6 +80,19 @@ describe('describeToolSchema', () => {
     expect(s.parameters.find((p) => p.name === 'confirm')).toBeUndefined();
   });
 
+  it('exposes executor control parameters in discovery schemas', () => {
+    const listSchema = schemaFor('list-sharepoint-site-list-items');
+    expect(listSchema.parameters.map((p) => p.name)).toEqual(
+      expect.arrayContaining(['fetchAllPages', 'includeHeaders', 'excludeResponse'])
+    );
+
+    const sendSchema = schemaFor('send-mail');
+    expect(sendSchema.parameters.map((p) => p.name)).toEqual(
+      expect.arrayContaining(['includeHeaders', 'excludeResponse'])
+    );
+    expect(sendSchema.parameters.map((p) => p.name)).not.toContain('fetchAllPages');
+  });
+
   it('uses compact operational schemas for heavyweight SharePoint and Drive write tools', () => {
     const maxSchemaBytes = 5000;
     const toolNames = [

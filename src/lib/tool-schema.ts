@@ -5,6 +5,13 @@ import { isDestructiveOperation, type DestructiveCheckConfig } from './destructi
 
 type ToolEndpoint = (typeof api.endpoints)[number];
 type ParameterLocation = 'Path' | 'Query' | 'Body' | 'Header';
+type DescribedParameter = {
+  name: string;
+  in: ParameterLocation;
+  required: boolean;
+  description?: string;
+  schema: unknown;
+};
 
 const CONFLICT_BEHAVIOR_SCHEMA = {
   type: 'string',
@@ -153,11 +160,8 @@ function unwrapOptional(schema: z.ZodTypeAny): { inner: z.ZodTypeAny; optional: 
  * so an agent can construct a correctly-shaped `parameters` object for execute-tool.
  *
  * Includes synthetic runtime params injected by graph-tools.ts that an agent
- * needs to know about — currently `confirm` for destructive operations. Other
- * runtime params (`fetchAllPages`, `account`, `includeHeaders`, ...) are not
- * yet surfaced here; they're optional booleans with safe defaults so omitting
- * them from discovery only costs a feature, not correctness. `confirm` is the
- * exception because the server fails closed without it on destructive tools.
+ * needs to know about, including pagination/response controls and `confirm`
+ * for destructive operations.
  */
 export function describeToolSchema(
   tool: ToolEndpoint,
@@ -168,15 +172,9 @@ export function describeToolSchema(
   path: string;
   description: string;
   llmTip?: string;
-  parameters: Array<{
-    name: string;
-    in: ParameterLocation;
-    required: boolean;
-    description?: string;
-    schema: unknown;
-  }>;
+  parameters: DescribedParameter[];
 } {
-  const params = (tool.parameters ?? []).map((p) => {
+  const params: DescribedParameter[] = (tool.parameters ?? []).map((p) => {
     const { inner, optional } = unwrapOptional(p.schema as z.ZodTypeAny);
     const isPath = p.type === 'Path';
     const schema =
@@ -208,6 +206,8 @@ export function describeToolSchema(
     });
   }
 
+  params.push(...controlParametersFor(tool));
+
   const llmTip = config?.llmTip;
   return {
     name: tool.alias,
@@ -217,6 +217,38 @@ export function describeToolSchema(
     ...(llmTip ? { llmTip } : {}),
     parameters: params,
   };
+}
+
+function controlParametersFor(tool: ToolEndpoint): DescribedParameter[] {
+  const controls: DescribedParameter[] = [
+    {
+      name: 'includeHeaders',
+      in: 'Query',
+      required: false,
+      description: 'Include response headers such as ETag in the response metadata.',
+      schema: { type: 'boolean' },
+    },
+    {
+      name: 'excludeResponse',
+      in: 'Query',
+      required: false,
+      description: 'Return only success or failure instead of the full response body.',
+      schema: { type: 'boolean' },
+    },
+  ];
+
+  if (tool.method.toUpperCase() === 'GET') {
+    controls.unshift({
+      name: 'fetchAllPages',
+      in: 'Query',
+      required: false,
+      description:
+        'Follow @odata.nextLink and merge pages when the server allows pagination. Use with small $top/$select values for bounded exports.',
+      schema: { type: 'boolean' },
+    });
+  }
+
+  return controls.filter((control) => !(tool.parameters ?? []).some((p) => p.name === control.name));
 }
 
 function toJsonSchema(schema: z.ZodTypeAny): unknown {
