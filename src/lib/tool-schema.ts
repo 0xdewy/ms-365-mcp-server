@@ -4,6 +4,130 @@ import type { api } from '../generated/client.js';
 import { isDestructiveOperation, type DestructiveCheckConfig } from './destructive-ops.js';
 
 type ToolEndpoint = (typeof api.endpoints)[number];
+type ParameterLocation = 'Path' | 'Query' | 'Body' | 'Header';
+
+const CONFLICT_BEHAVIOR_SCHEMA = {
+  type: 'string',
+  enum: ['rename', 'replace', 'fail'],
+  description: 'How Graph should handle a name conflict.',
+} as const;
+
+const COMPACT_BODY_SCHEMAS: Record<string, unknown> = {
+  'create-sharepoint-list': {
+    type: 'object',
+    required: ['displayName', 'list'],
+    additionalProperties: true,
+    properties: {
+      displayName: { type: 'string', description: 'Visible list name.' },
+      description: { type: 'string', description: 'Optional list description.' },
+      list: {
+        type: 'object',
+        required: ['template'],
+        additionalProperties: true,
+        properties: {
+          template: {
+            type: 'string',
+            enum: [
+              'genericList',
+              'documentLibrary',
+              'tasks',
+              'calendar',
+              'contacts',
+              'links',
+              'announcements',
+              'survey',
+            ],
+          },
+        },
+      },
+      columns: {
+        type: 'array',
+        description: 'Optional initial column definitions.',
+        items: {
+          type: 'object',
+          required: ['name'],
+          additionalProperties: true,
+          properties: {
+            name: { type: 'string' },
+            displayName: { type: 'string' },
+            description: { type: 'string' },
+            text: { type: 'object', additionalProperties: true },
+            choice: {
+              type: 'object',
+              additionalProperties: true,
+              properties: {
+                choices: { type: 'array', items: { type: 'string' } },
+              },
+            },
+            dateTime: { type: 'object', additionalProperties: true },
+            number: { type: 'object', additionalProperties: true },
+            boolean: { type: 'object', additionalProperties: true },
+            currency: { type: 'object', additionalProperties: true },
+            hyperlinkOrPicture: { type: 'object', additionalProperties: true },
+            personOrGroup: { type: 'object', additionalProperties: true },
+            lookup: { type: 'object', additionalProperties: true },
+            calculated: { type: 'object', additionalProperties: true },
+          },
+        },
+      },
+    },
+  },
+  'create-sharepoint-list-item': {
+    type: 'object',
+    required: ['fields'],
+    additionalProperties: true,
+    properties: {
+      fields: {
+        type: 'object',
+        description: 'SharePoint column internal names mapped to values.',
+        additionalProperties: true,
+      },
+    },
+  },
+  'update-sharepoint-list-item': {
+    type: 'object',
+    required: ['fields'],
+    additionalProperties: true,
+    properties: {
+      fields: {
+        type: 'object',
+        description: 'Only the SharePoint fields to update, keyed by column internal name.',
+        additionalProperties: true,
+      },
+    },
+  },
+  'create-onedrive-folder': {
+    type: 'object',
+    required: ['name', 'folder'],
+    additionalProperties: true,
+    properties: {
+      name: { type: 'string', description: 'Folder name to create.' },
+      folder: {
+        type: 'object',
+        description: 'Must be an empty object for a folder create request.',
+        additionalProperties: true,
+      },
+      '@microsoft.graph.conflictBehavior': CONFLICT_BEHAVIOR_SCHEMA,
+    },
+  },
+  'move-rename-onedrive-item': {
+    type: 'object',
+    additionalProperties: true,
+    properties: {
+      name: { type: 'string', description: 'New item name when renaming.' },
+      parentReference: {
+        type: 'object',
+        description: 'Target parent folder reference when moving.',
+        additionalProperties: true,
+        properties: {
+          id: { type: 'string', description: 'Target parent driveItem id.' },
+          driveId: { type: 'string', description: 'Target drive id, when moving across drives.' },
+        },
+      },
+      '@microsoft.graph.conflictBehavior': CONFLICT_BEHAVIOR_SCHEMA,
+    },
+  },
+};
 
 /**
  * Subset of EndpointConfig needed to describe a tool's schema in discovery
@@ -46,7 +170,7 @@ export function describeToolSchema(
   llmTip?: string;
   parameters: Array<{
     name: string;
-    in: 'Path' | 'Query' | 'Body' | 'Header';
+    in: ParameterLocation;
     required: boolean;
     description?: string;
     schema: unknown;
@@ -55,11 +179,13 @@ export function describeToolSchema(
   const params = (tool.parameters ?? []).map((p) => {
     const { inner, optional } = unwrapOptional(p.schema as z.ZodTypeAny);
     const isPath = p.type === 'Path';
-    const jsonSchema = zodToJsonSchema(inner, { target: 'jsonSchema7', $refStrategy: 'none' });
-    const { $schema: _s, ...schema } = jsonSchema as Record<string, unknown>;
+    const schema =
+      p.type === 'Body' && COMPACT_BODY_SCHEMAS[tool.alias]
+        ? COMPACT_BODY_SCHEMAS[tool.alias]
+        : toJsonSchema(inner);
     return {
       name: p.name,
-      in: p.type as 'Path' | 'Query' | 'Body' | 'Header',
+      in: p.type as ParameterLocation,
       required: isPath || !optional,
       description: p.description,
       schema,
@@ -93,6 +219,12 @@ export function describeToolSchema(
   };
 }
 
+function toJsonSchema(schema: z.ZodTypeAny): unknown {
+  const jsonSchema = zodToJsonSchema(schema, { target: 'jsonSchema7', $refStrategy: 'seen' });
+  const { $schema: _s, ...result } = jsonSchema as Record<string, unknown>;
+  return result;
+}
+
 interface UtilityDescriptor {
   name: string;
   method: string;
@@ -122,14 +254,12 @@ export function describeUtilityToolSchema<C>(
   const schemaMap = utility.buildSchema(ctx);
   const params = Object.entries(schemaMap).map(([name, zodSchema]) => {
     const { inner, optional } = unwrapOptional(zodSchema);
-    const jsonSchema = zodToJsonSchema(inner, { target: 'jsonSchema7', $refStrategy: 'none' });
-    const { $schema: _s, ...schema } = jsonSchema as Record<string, unknown>;
     return {
       name,
       in: 'Query' as const,
       required: !optional,
       description: zodSchema.description,
-      schema,
+      schema: toJsonSchema(inner),
     };
   });
   return {
