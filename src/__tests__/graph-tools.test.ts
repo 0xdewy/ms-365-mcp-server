@@ -876,6 +876,131 @@ describe('graph-tools', () => {
       const [, options] = graphClient.graphRequest.mock.calls[0];
       expect(options.headers['Content-Type']).toBe('application/pdf');
     });
+
+    it('uploads a new file under a parent folder with the Graph path-addressed content endpoint', async () => {
+      const endpoint = makeEndpoint({
+        alias: 'upload-new-file-content',
+        method: 'put',
+        path: '/drives/:driveId/items/:parentItemId:/:filename:/content',
+        requestFormat: 'binary' as const,
+        parameters: [
+          { name: 'driveId', type: 'Path', schema: z.string() },
+          { name: 'parentItemId', type: 'Path', schema: z.string() },
+          { name: 'filename', type: 'Path', schema: z.string() },
+          { name: 'body', type: 'Body', schema: z.string() },
+        ],
+      });
+      const config = makeConfig({
+        toolName: 'upload-new-file-content',
+        method: 'put',
+        pathPattern: '/drives/{drive-id}/items/{parentItem-id}:/{filename}:/content',
+        scopes: ['Files.ReadWrite'],
+      });
+      mockEndpoints.push(endpoint);
+      mockEndpointsJson = [config];
+
+      const graphClient = createMockGraphClient([{ content: [{ type: 'text', text: '{}' }] }]);
+
+      const server = createMockServer();
+      const { registerGraphTools } = await loadModule();
+      registerGraphTools(server as any, graphClient as any);
+
+      const original = 'PNG bytes';
+      await server.tools.get('upload-new-file-content')!.handler({
+        driveId: 'drive123',
+        parentItemId: 'folder456',
+        filename: 'logo-kintsugi-new.png',
+        body: Buffer.from(original).toString('base64'),
+      });
+
+      const [path, options] = graphClient.graphRequest.mock.calls[0];
+      expect(path).toBe('/drives/drive123/items/folder456:/logo-kintsugi-new.png:/content');
+      expect(options.headers['Content-Type']).toBe('application/octet-stream');
+      expect(Buffer.from(options.body).toString('utf-8')).toBe(original);
+    });
+
+    it('encodes slashes in new-file filenames so callers cannot accidentally smuggle a path', async () => {
+      const endpoint = makeEndpoint({
+        alias: 'upload-new-file-content',
+        method: 'put',
+        path: '/drives/:driveId/items/:parentItemId:/:filename:/content',
+        requestFormat: 'binary' as const,
+        parameters: [
+          { name: 'driveId', type: 'Path', schema: z.string() },
+          { name: 'parentItemId', type: 'Path', schema: z.string() },
+          { name: 'filename', type: 'Path', schema: z.string() },
+          { name: 'body', type: 'Body', schema: z.string() },
+        ],
+      });
+      const config = makeConfig({
+        toolName: 'upload-new-file-content',
+        method: 'put',
+        pathPattern: '/drives/{drive-id}/items/{parentItem-id}:/{filename}:/content',
+        scopes: ['Files.ReadWrite'],
+      });
+      mockEndpoints.push(endpoint);
+      mockEndpointsJson = [config];
+
+      const graphClient = createMockGraphClient([{ content: [{ type: 'text', text: '{}' }] }]);
+
+      const server = createMockServer();
+      const { registerGraphTools } = await loadModule();
+      registerGraphTools(server as any, graphClient as any);
+
+      await server.tools.get('upload-new-file-content')!.handler({
+        driveId: 'drive123',
+        parentItemId: 'folder456',
+        filename: 'nested/logo.png',
+        body: Buffer.from('x').toString('base64'),
+      });
+
+      const [path] = graphClient.graphRequest.mock.calls[0];
+      expect(path).toBe('/drives/drive123/items/folder456:/nested%2Flogo.png:/content');
+    });
+
+    it('creates an upload session for a new file under a parent folder', async () => {
+      const endpoint = makeEndpoint({
+        alias: 'create-new-file-upload-session',
+        method: 'post',
+        path: '/drives/:driveId/items/:parentItemId:/:filename:/createUploadSession',
+        requestFormat: 'json' as const,
+        parameters: [
+          { name: 'driveId', type: 'Path', schema: z.string() },
+          { name: 'parentItemId', type: 'Path', schema: z.string() },
+          { name: 'filename', type: 'Path', schema: z.string() },
+          { name: 'body', type: 'Body', schema: z.object({}).passthrough() },
+        ],
+      });
+      const config = makeConfig({
+        toolName: 'create-new-file-upload-session',
+        method: 'post',
+        pathPattern: '/drives/{drive-id}/items/{parentItem-id}:/{filename}:/createUploadSession',
+        scopes: ['Files.ReadWrite'],
+      });
+      mockEndpoints.push(endpoint);
+      mockEndpointsJson = [config];
+
+      const graphClient = createMockGraphClient([
+        { content: [{ type: 'text', text: '{"uploadUrl":"https://upload.example"}' }] },
+      ]);
+
+      const server = createMockServer();
+      const { registerGraphTools } = await loadModule();
+      registerGraphTools(server as any, graphClient as any);
+
+      await server.tools.get('create-new-file-upload-session')!.handler({
+        driveId: 'drive123',
+        parentItemId: 'folder456',
+        filename: 'deck.pdf',
+        body: { item: { '@microsoft.graph.conflictBehavior': 'replace' } },
+      });
+
+      const [path, options] = graphClient.graphRequest.mock.calls[0];
+      expect(path).toBe('/drives/drive123/items/folder456:/deck.pdf:/createUploadSession');
+      expect(JSON.parse(options.body)).toEqual({
+        item: { '@microsoft.graph.conflictBehavior': 'replace' },
+      });
+    });
   });
 
   // ---- 9. download-bytes utility tool ----
