@@ -178,6 +178,16 @@ MS365_MCP_PUBLIC_URL=https://mcp.example.com
 
 Only browser-facing fields (`issuer`, `authorization_endpoint`, `authorization_servers`) are pinned to this URL. Server-to-server endpoints (`token_endpoint`, `registration_endpoint`, `resource`) stay on the request origin, so clients that reach the server over an internal network (e.g. another container on the same Docker network) don't have to round-trip back through the public URL.
 
+## HTTP Body Size
+
+HTTP mode defaults to a `25mb` request-body limit. Override it with `MS365_MCP_HTTP_BODY_LIMIT` when a trusted deployment needs larger MCP JSON requests:
+
+```bash
+MS365_MCP_HTTP_BODY_LIMIT=50mb
+```
+
+This limit applies before tool execution. It affects file-upload tools that carry base64 file bytes inside the MCP JSON body; base64 adds roughly 33% overhead before JSON framing. For larger SharePoint/OneDrive files, prefer `create-upload-session` and upload raw bytes directly to the returned `uploadUrl`, which avoids routing the file through MCP JSON.
+
 ## Client Configuration
 
 Once deployed, users connect by pointing their MCP client to the server URL:
