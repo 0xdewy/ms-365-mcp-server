@@ -55,6 +55,7 @@ export function createAndSaveSimplifiedOpenAPI(
         description: `Path parameter: ${paramName}`,
         schema: { type: 'string' },
       }));
+      const isBinaryRequest = endpoint.requestFormat === 'binary';
       pathSpec[methodLower] = {
         tags: ['drives.driveItem'],
         summary: endpoint.llmTip || `${endpoint.toolName} (synthesized)`,
@@ -68,15 +69,22 @@ export function createAndSaveSimplifiedOpenAPI(
                 description: 'Operation payload',
                 required: true,
                 content: {
-                  'application/json': {
+                  [isBinaryRequest ? 'application/octet-stream' : 'application/json']: {
                     // When an endpoint declares a typed body schema in endpoints.json
                     // (for APIs Microsoft hasn't published in its OpenAPI metadata),
                     // use it so the generated client gets a validated `body` param.
                     // Otherwise fall back to a permissive object.
-                    schema: endpoint.requestBodySchema ?? {
-                      type: 'object',
-                      additionalProperties: true,
-                    },
+                    schema:
+                      endpoint.requestBodySchema ??
+                      (isBinaryRequest
+                        ? {
+                            type: 'string',
+                            format: 'binary',
+                          }
+                        : {
+                            type: 'object',
+                            additionalProperties: true,
+                          }),
                   },
                 },
               },

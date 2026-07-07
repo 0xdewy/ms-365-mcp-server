@@ -579,7 +579,16 @@
     "toolName": "upload-file-content",
     "presets": ["files", "onedrive", "personal"],
     "scopes": ["Files.ReadWrite"],
-    "llmTip": "Body is a base64-encoded string of the file bytes; the server decodes it before PUT. Max 4MB inline (use create-upload-session above 4MB). For new files use path format: /items/root:/path/to/file.txt:/content. Overwrites existing files without warning."
+    "llmTip": "Replaces the bytes of an existing file driveItem. Body is a base64-encoded string of the file bytes; the server decodes it before PUT. Max 4MB inline (use create-upload-session above 4MB). Do not pass a folder id here: Graph rejects /content on folders. To create a new file inside a folder, use upload-new-file-content."
+  },
+  {
+    "pathPattern": "/drives/{drive-id}/items/{parentItem-id}:/{filename}:/content",
+    "method": "put",
+    "toolName": "upload-new-file-content",
+    "presets": ["files", "onedrive", "personal"],
+    "scopes": ["Files.ReadWrite"],
+    "requestFormat": "binary",
+    "llmTip": "Creates or replaces a file inside an existing parent folder. Pass parentItem-id as the folder driveItem id and filename as a single file name, not a path. Body is a base64-encoded string of the file bytes; the server decodes it before PUT. Max 4MB inline; use create-new-file-upload-session above 4MB. This avoids the Graph error 'Cannot upload content to an item representing a folder.'"
   },
   {
     "pathPattern": "/drives/{drive-id}/items/{driveItem-id}/createUploadSession",
@@ -587,7 +596,15 @@
     "toolName": "create-upload-session",
     "presets": ["files", "onedrive", "personal"],
     "scopes": ["Files.ReadWrite"],
-    "llmTip": "For large file uploads (no size limit). Returns a pre-authenticated uploadUrl for direct PUT of file bytes. For new files use path: /items/{parentId}:/{fileName}:/createUploadSession. Body (optional): { item: { '@microsoft.graph.conflictBehavior': 'rename' } }."
+    "llmTip": "Creates an upload session for replacing the bytes of an existing file driveItem. Returns a pre-authenticated uploadUrl for direct PUT of file bytes. Do not pass a folder id here. For new files inside a folder, use create-new-file-upload-session. Body (optional): { item: { '@microsoft.graph.conflictBehavior': 'rename' } }."
+  },
+  {
+    "pathPattern": "/drives/{drive-id}/items/{parentItem-id}:/{filename}:/createUploadSession",
+    "method": "post",
+    "toolName": "create-new-file-upload-session",
+    "presets": ["files", "onedrive", "personal"],
+    "scopes": ["Files.ReadWrite"],
+    "llmTip": "Creates an upload session for a new file inside an existing parent folder. Pass parentItem-id as the folder driveItem id and filename as a single file name, not a path. Returns a pre-authenticated uploadUrl for direct PUT of file bytes. Body (optional): { item: { '@microsoft.graph.conflictBehavior': 'rename' } }. Use this for PDFs/large files instead of upload-file-content."
   },
   {
     "pathPattern": "/drives/{drive-id}/items/{driveItem-id}",
