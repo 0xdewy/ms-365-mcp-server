@@ -591,6 +591,7 @@ Environment variables:
 - `MS365_MCP_ALLOW_PAGINATION=0|false|no`: Disable multi-page following entirely. When set, the `fetchAllPages` parameter is not advertised on tools, and any request that still passes it returns only the first page (default: pagination enabled).
 - `MS365_MCP_BODY_FORMAT=html`: Return email bodies as HTML instead of plain text (default: text)
 - `MS365_MCP_RATE_LIMIT_DISABLED=true|1`: Disable per-IP rate limiting in HTTP mode (default: enabled — 30 req/min on `/authorize`, `/token`, `/register`; 120 req/min on `/mcp`)
+- `MS365_MCP_HTTP_BODY_LIMIT=<size>`: Maximum HTTP request body size in HTTP mode (default: `25mb`). This matters for MCP tools that send file bytes as base64 inside JSON; base64 adds roughly 33% overhead before the JSON envelope. For large SharePoint/OneDrive uploads, prefer `create-upload-session` plus direct upload to the returned `uploadUrl` instead of sending bytes through MCP.
 - `MS365_MCP_TRUST_PROXY_HOPS=<n>`: Number of trusted reverse-proxy hops in HTTP mode (default `1`). Accurate per-IP rate limiting depends on this matching your deployment — set to the number of proxies in front of the server, `0` to use the raw socket peer IP, or a comma-separated subnet list
 - `MS365_MCP_CLOUD_TYPE=global|china`: Microsoft cloud environment (alternative to --cloud flag)
 - `LOG_LEVEL`: Set logging level (default: 'info')

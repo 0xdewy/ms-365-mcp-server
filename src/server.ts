@@ -58,6 +58,10 @@ function parseHttpOption(httpOption: string | boolean): { host: string | undefin
   return { host: undefined, port };
 }
 
+function getHttpBodyLimit(): string {
+  return process.env.MS365_MCP_HTTP_BODY_LIMIT || '25mb';
+}
+
 class MicrosoftGraphServer {
   private authManager: AuthManager;
   private options: CommandOptions;
@@ -249,8 +253,9 @@ class MicrosoftGraphServer {
         })
       );
 
-      app.use(express.json());
-      app.use(express.urlencoded({ extended: true }));
+      const httpBodyLimit = getHttpBodyLimit();
+      app.use(express.json({ limit: httpBodyLimit }));
+      app.use(express.urlencoded({ extended: true, limit: httpBodyLimit }));
 
       // Add CORS headers for all routes
       const corsOrigin = process.env.MS365_MCP_CORS_ORIGIN || 'http://localhost:3000';
