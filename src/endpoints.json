@@ -579,6 +579,7 @@
     "toolName": "upload-file-content",
     "presets": ["files", "onedrive", "personal"],
     "scopes": ["Files.ReadWrite"],
+    "requestFormat": "binary",
     "llmTip": "Replaces the bytes of an existing file driveItem. Body is a base64-encoded string of the file bytes; the server decodes it before PUT. Max 4MB inline (use create-upload-session above 4MB). Do not pass a folder id here: Graph rejects /content on folders. To create a new file inside a folder, use upload-new-file-content."
   },
   {
