@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'fs';
 import { registerGraphTools } from '../src/graph-tools.js';
 import { api } from '../src/generated/client.js';
-import endpoints from '../src/endpoints.json' with { type: 'json' };
+
+const endpoints = JSON.parse(
+  readFileSync(new URL('../src/endpoints.json', import.meta.url), 'utf8')
+);
 
 function createMockServer() {
   const tools = new Map<
@@ -27,7 +31,9 @@ function createMockServer() {
 
 describe('upload-file-content regression', () => {
   it('keeps upload-file-content configured as a binary request', () => {
-    const generatedTool = api.endpoints.find((endpoint) => endpoint.alias === 'upload-file-content');
+    const generatedTool = api.endpoints.find(
+      (endpoint) => endpoint.alias === 'upload-file-content'
+    );
     const sourceConfig = endpoints.find((endpoint) => endpoint.toolName === 'upload-file-content');
 
     expect(generatedTool?.requestFormat).toBe('binary');
@@ -36,9 +42,9 @@ describe('upload-file-content regression', () => {
 
   it('sends raw bytes with application/octet-stream for upload-file-content', async () => {
     const graphClient = {
-      graphRequest: vi
-        .fn()
-        .mockResolvedValue({ content: [{ type: 'text', text: JSON.stringify({ id: 'item456' }) }] }),
+      graphRequest: vi.fn().mockResolvedValue({
+        content: [{ type: 'text', text: JSON.stringify({ id: 'item456' }) }],
+      }),
     };
     const server = createMockServer();
 

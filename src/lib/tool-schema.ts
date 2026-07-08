@@ -248,7 +248,9 @@ function controlParametersFor(tool: ToolEndpoint): DescribedParameter[] {
     });
   }
 
-  return controls.filter((control) => !(tool.parameters ?? []).some((p) => p.name === control.name));
+  return controls.filter(
+    (control) => !(tool.parameters ?? []).some((p) => p.name === control.name)
+  );
 }
 
 function toJsonSchema(schema: z.ZodTypeAny): unknown {
