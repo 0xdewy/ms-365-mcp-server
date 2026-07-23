@@ -953,8 +953,9 @@ async function executeGraphTool(
     }
 
     const isProbablyMediaContent =
-      tool.errors?.some((error) => error.description === 'Retrieved media content') ||
-      path.endsWith('/content');
+      options.method === 'GET' &&
+      (tool.errors?.some((error) => error.description === 'Retrieved media content') ||
+        path.endsWith('/content'));
 
     if (config?.returnDownloadUrl && path.endsWith('/content')) {
       path = path.replace(/\/content$/, '');

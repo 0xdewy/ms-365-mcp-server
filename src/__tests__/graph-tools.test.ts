@@ -836,6 +836,7 @@ describe('graph-tools', () => {
       expect(options.headers['Content-Type']).toBe('application/octet-stream');
       expect(Buffer.isBuffer(options.body) || options.body instanceof Uint8Array).toBe(true);
       expect(Buffer.from(options.body).toString('utf-8')).toBe(original);
+      expect(options.rawResponse).toBeUndefined();
     });
 
     it('honors endpoints.json contentType override on binary uploads', async () => {
@@ -917,6 +918,7 @@ describe('graph-tools', () => {
       expect(path).toBe('/drives/drive123/items/folder456:/logo-kintsugi-new.png:/content');
       expect(options.headers['Content-Type']).toBe('application/octet-stream');
       expect(Buffer.from(options.body).toString('utf-8')).toBe(original);
+      expect(options.rawResponse).toBeUndefined();
     });
 
     it('encodes slashes in new-file filenames so callers cannot accidentally smuggle a path', async () => {
