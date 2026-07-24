@@ -152,6 +152,18 @@ describe('allowed scope helpers', () => {
 
       expect(scopes.filter((s) => s === 'Mail.Read')).toHaveLength(1);
     });
+
+    it('does not request a narrower file scope beside Files.ReadWrite.All', () => {
+      const scopes = resolveAuthScopes({
+        enabledTools: 'upload-file-content',
+        allowedScopes: 'Files.ReadWrite Files.ReadWrite.All',
+        extraScopes: 'Files.ReadWrite.All',
+      });
+
+      expect(scopes).toContain('Files.ReadWrite.All');
+      expect(scopes).not.toContain('Files.ReadWrite');
+      expect(scopes).not.toContain('Files.Read');
+    });
   });
 
   describe('collapseScopeHierarchy', () => {

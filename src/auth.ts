@@ -279,6 +279,16 @@ function collapseRedundantScopes(scopes: string[]): string[] {
   return Array.from(scopesSet);
 }
 
+function collapseExplicitBroaderScopes(scopes: string[]): string[] {
+  const scopesSet = new Set(scopes);
+  for (const higherScope of scopesSet) {
+    for (const lowerScope of lowerScopesFor(higherScope)) {
+      scopesSet.delete(lowerScope);
+    }
+  }
+  return Array.from(scopesSet);
+}
+
 function buildScopesFromEndpoints(
   includeWorkAccountScopes: boolean = false,
   enabledToolsPattern?: string,
@@ -500,7 +510,9 @@ function resolveAuthScopes(options: AllowedScopeOptions = {}): string[] {
   if (!extraScopes || extraScopes.length === 0) {
     return toolScopes;
   }
-  return Array.from(new Set([...toolScopes, ...extraScopes]));
+  // Entra evaluates consent against every requested scope string. If an explicit
+  // broader scope covers a tool-derived scope, request only the broader one.
+  return collapseExplicitBroaderScopes([...toolScopes, ...extraScopes]);
 }
 
 function buildScopeDiagnostics(
